@@ -502,8 +502,7 @@ st.markdown(
     <div class="footer-container">
         <div class="footer-content">
             <p class="footer-text">
-                Made with <span class="footer-heart">♥</span> by 
-                <a href="https://github.com/Abdulraqib20" target="_blank" class="footer-link">raqibcodes</a>
+                Developed by <a href="https://github.com/Abdulraqib20" target="_blank" class="footer-link">raqibcodes</a>
             </p>
         </div>
     </div>
