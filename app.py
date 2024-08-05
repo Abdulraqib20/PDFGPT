@@ -244,8 +244,13 @@ components.html(custom_html, height=460, scrolling=True)
 
 
 
-PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-GROQ_API_KEY=os.getenv("GROQ_API_KEY")
+# PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+# GROQ_API_KEY=os.getenv("GROQ_API_KEY")
+
+PINECONE_API_KEY = st.secrets("PINECONE_API_KEY")
+GROQ_API_KEY = st.secrets("GROQ_API_KEY")
+
+
 OPENAI_API_KEY=os.getenv("OPENAI_API_KEY")
 MODEL_NAME = "llama3-70b-8192"
 TEMPERATURE=0.2
