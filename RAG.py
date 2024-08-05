@@ -282,6 +282,7 @@ class RetrievalAugmentGeneration:
         st.session_state.chat_history = []
         st.session_state.messages = []
         logger.info("Chat history cleared.")
+        st.success("Conversation history cleared successfully!")
 
         
         
