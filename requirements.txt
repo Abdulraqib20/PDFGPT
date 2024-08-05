@@ -8,4 +8,5 @@ langchain_openai==0.1.8
 pinecone-client==3.2.2
 langchain_community==0.2.5
 python-dotenv==1.0.1
+pypdf==4.2.0
 
