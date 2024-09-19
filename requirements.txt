@@ -24,6 +24,7 @@ langchain_community
 python-dotenv
 pypdf
 chromadb
-protobuf
+protobuf==3.20.3
+grpcio==1.44.0
 pydantic<2.0.0
 
