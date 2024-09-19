@@ -1,5 +1,13 @@
-####---------------------------------------------Groq---------------------------------------------------------------####
+####---------------------------------------------RAG Pipeline-----------------------------------------------####
+
+import os
+import tempfile
+import streamlit as st
 import logging
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 from typing import Optional, List, Dict, Any
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
@@ -9,45 +17,32 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from dotenv import load_dotenv;load_dotenv()
 from langchain_groq import ChatGroq
-from pinecone import Pinecone
-from langchain_pinecone import PineconeVectorStore
+from langchain_community.vectorstores import Chroma
+# from langchain_community.vectorstores import Pinecone as PineConeVector
+# from pinecone import Pinecone
+# from langchain_pinecone import PineconeVectorStore
 # from langchain_community.vectorstores import Pinecone as langchain_pinecone
-from langchain_openai import OpenAIEmbeddings
 from langchain.schema import StrOutputParser, Document
-import os
-import tempfile
-import streamlit as st
+from langchain.memory.buffer import ConversationBufferMemory
+import warnings;warnings.filterwarnings("ignore")
 
+from src.config.appconfig import GROQ_API_KEY, MODEL_NAME, TEMPERATURE
+from src.tools.prompt_neck import PDF_SYS_PROMPT_NECK
 
-
-# PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-# GROQ_API_KEY=os.getenv("GROQ_API_KEY")
-
-PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
-GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
-
-# OPENAI_API_KEY=os.getenv("OPENAI_API_KEY")
-# MODEL_NAME = "llama3-70b-8192"
-# TEMPERATURE=0.2
-# CHUNK_SIZE=700
-# CHUNK_OVERLAP=100
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
+# GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 
 
 ####---------------------------------------------RAG---------------------------------------------------------------####
 
 class RetrievalAugmentGeneration:
-    def __init__(self, groq_api_key: str, pinecone_api_key: str, openai_api_key: str, 
-                 model_name: str = "llama3-70b-8192", temperature: float = 0.2, 
-                 chunk_size: int = 700, chunk_overlap: int = 100):
-        self.groq_api_key = groq_api_key
-        self.pinecone_api_key = pinecone_api_key
-        self.openai_api_key = openai_api_key
-        self.model_name = model_name
-        self.temperature = temperature
+    def __init__(self, chunk_size: int = 1500, chunk_overlap: int = 100):
+        self.persist_directory = r"src\docs\chroma"
+        self.llm = ChatGroq(model=MODEL_NAME, api_key=GROQ_API_KEY, temperature=TEMPERATURE, max_retries=5)
+        self.memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+        self.groq_api_key = GROQ_API_KEY
+        self.model_name = MODEL_NAME
+        self.temperature = TEMPERATURE
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.initialize_session_state()
@@ -75,6 +70,7 @@ class RetrievalAugmentGeneration:
         Returns:
         list: List of pages from the PDF document.
         """
+        
         if uploaded_file is None:
             st.warning("Please upload a PDF file.")
             return None
@@ -85,6 +81,8 @@ class RetrievalAugmentGeneration:
 
             pdf_loader = PyPDFLoader(tmp_file_path)
             pages = pdf_loader.load_and_split()
+            
+            _self.loaded_doc = pages
             
             os.unlink(tmp_file_path)
             
@@ -109,6 +107,14 @@ class RetrievalAugmentGeneration:
                 model_kwargs={'device': 'cpu'},
                 encode_kwargs={'normalize_embeddings': False}
             )
+            
+            # embeddings =  OpenAIEmbeddings(
+            #     api_key=_self.openai_api_key,
+            #     model="text-embedding-3-small",
+            #     max_retries=3,
+            #     dimensions=1536
+            # )
+            
             logger.info("Embeddings loaded successfully")
             
             return embeddings
@@ -117,50 +123,32 @@ class RetrievalAugmentGeneration:
             logger.error(f"Error loading embeddings: {str(e)}")
             st.error(f"Error loading embeddings: {str(e)}")
             return None
-        
-        # try:
-        #     embeddings =  OpenAIEmbeddings(
-        #         api_key=_self.openai_api_key,
-        #         model="text-embedding-3-small",
-        #         max_retries=3,
-        #         dimensions=1536
-        #     )
-        #     logger.info("Embeddings loaded successfully")
-            
-        #     return embeddings
-        
-        # except Exception as e:
-        #     logger.error(f"Error loading embeddings: {str(e)}")
-        #     return None
     
 
 #-----------------------------------------------Creating Vector Store---------------------------------#       
     @st.cache_resource
-    def create_vector_store(_self, _documents: List[Document]) -> Optional[PineconeVectorStore]:
+    def create_vector_store(_self, _documents: List[Document]) -> Optional[Chroma]:
         if not _documents:
             logger.warning("No documents provided to the vector store.")
             return None
-        
+
         try:
-            pc = Pinecone(api_key=_self.pinecone_api_key)
-            index_name = "pdf"
-            
             text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=_self.chunk_size,
-                chunk_overlap=_self.chunk_overlap,
-                separators=["\n\n", "\n", " ", ""]
+            chunk_size=_self.chunk_size,
+            chunk_overlap=_self.chunk_overlap,
+            separators=["\n\n", "\n", " ", ""]
             )
             texts = text_splitter.split_documents(_documents)
             
+            embeddings = _self.load_embeddings()
             
-            # Create and return the vector store
-            # embeddings = _self.load_embeddings()
-            vector_store = PineconeVectorStore.from_documents(
+            vector_store = Chroma.from_documents(
                 documents=texts,
-                embedding=_self.load_embeddings(),
-                index_name=index_name,
-                namespace="pdf"
+                embedding=embeddings,
+                persist_directory=_self.persist_directory
             )
+            vector_store.persist()
+            
             logger.info(f"Vector store created with {len(texts)} chunks.")
             return vector_store
         
@@ -172,7 +160,10 @@ class RetrievalAugmentGeneration:
     
 #-----------------------------------------------Creating Retriever---------------------------------# 
     def retriever(self, user_query: str) -> Dict[str, Any]:
-        logger.info('INSIDE RETRIEVER FUNCTION')
+        logger.info('Retrieving Relevant Documents')
+        if os.path.exists(self.persist_directory) == False:
+                self.document_loader()
+                self.create_vector_store()
         
         if not self.vector_store:
             logger.error("Vector store not initialized.")
@@ -180,9 +171,10 @@ class RetrievalAugmentGeneration:
         
         try:
             
+            k = 4
             retriever = self.vector_store.as_retriever(
                 search_type="similarity",
-                search_kwargs={"k": 4}  
+                search_kwargs={"k": k}  
             )
             
             relevant_docs = self.vector_store.similarity_search(user_query, k=4)
@@ -207,32 +199,15 @@ class RetrievalAugmentGeneration:
             logger.error("Vector store not initialized. Cannot create RAG application.")
             return None
         
-        retriever = _self.vector_store.as_retriever(search_type="similarity", search_kwargs={"k":4})
+        k = 4
+        retriever = _self.vector_store.as_retriever(search_type="similarity", search_kwargs={"k": k})
         
-        template_str = """
-        You are an intelligent assistant specialized in analyzing, discussing and analyzing PDF documents. Your task is to provide 
-        accurate, helpful, and concise responses to questions about the uploaded PDF file. Use only the information 
-        provided in the context to answer the question.
-        
-        Provide detailed, data-driven insights based on the uploaded PDF File. If the answer is not explicitly stated in the context, use your 
-        reasoning skills to provide the most likely answer based on the given information and suggest what additional information might be needed.
-
-        Be thorough in your analysis, but do not invent or assume information that is not present in the data. 
-        If you're unsure about any aspect, ask for clarification or more specific questions.
-
-        Context from the PDF: {context}
-        Human: {question}
-        Assistant: Based on the provided context and your question, I'll analyze the PDF File and provide insights. 
-        """
-        
-        prompt = PromptTemplate(input_variables=['context', 'input'], template=template_str)
-        
-        model = ChatGroq(model=_self.model_name, api_key=_self.groq_api_key, temperature=_self.temperature)
+        prompt = PromptTemplate(input_variables=['context', 'input'], template=PDF_SYS_PROMPT_NECK)
         
         retriever_chain = (
-            {"context": retriever | _self.format_docs, "question": RunnablePassthrough()} 
+            {"context": retriever | _self.format_docs, "input": RunnablePassthrough()} 
             | prompt 
-            | model
+            | _self.llm
             | StrOutputParser()
         )
         
@@ -247,19 +222,20 @@ class RetrievalAugmentGeneration:
 
 #-----------------------------------------------Chat with PDF---------------------------------# 
     def chat_with_pdf(self, user_query: str) -> Dict[str, str]:
-        rag_chain = self.create_rag_pipeline()
-        if not rag_chain:
-            return {"error": "RAG pipeline could not be created."}
-        
         try:
+            rag_chain = self.create_rag_pipeline()
+            if not rag_chain:
+                raise ValueError("RAG pipeline could not be created.")
+            
             response = rag_chain.invoke(user_query)
             st.session_state.chat_history.append(('Human', user_query))
             st.session_state.chat_history.append(('AI', response))
             logger.info("Successfully generated response.")
             return {'result': response}
         except Exception as e:
-            logger.error(f"Error in chat_with_pdf: {str(e)}")
-            return {'error': str(e)}
+            error_message = f"Error in chat_with_pdf: {str(e)}"
+            logger.error(error_message)
+            return {'error': error_message}
     
     
     def process_uploaded_file(self, uploaded_file):
@@ -267,7 +243,7 @@ class RetrievalAugmentGeneration:
         if self.loaded_doc:
             self.vector_store = self.create_vector_store(self.loaded_doc)
             if self.vector_store:
-                logger.info("Vector store initialized successfully.")
+                logger.info("Vector store initialized sucscessfully.")
             else:
                 logger.error("Failed to create vector store.")
         else:
@@ -283,6 +259,3 @@ class RetrievalAugmentGeneration:
         st.session_state.messages = []
         logger.info("Chat history cleared.")
         st.success("Conversation history cleared successfully!")
-
-        
-        
