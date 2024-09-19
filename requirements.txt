@@ -23,9 +23,9 @@ pinecone-client
 langchain_community
 python-dotenv
 pypdf
-chromadb
+chromadb==0.5.3
 langchain-chroma
-pysqlite3-binary>=3.35.0
+# pysqlite3-binary>=3.35.0
 pyodbc
 python-dotenv
 protobuf==3.20.3
