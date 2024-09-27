@@ -266,7 +266,7 @@ class RetrievalAugmentGeneration:
             pc = Pinecone(
                 api_key=PINECONE_API_KEY,
             )
-            index_name="pdf-gpt"
+            index_name="pdf"
             
             # List all existing indexes
             existing_indexes = pc.list_indexes()
@@ -292,7 +292,7 @@ class RetrievalAugmentGeneration:
                 documents=texts,
                 index=index_name,
                 embedding=self.load_embeddings(),
-                namespace="wondervector5000"
+                namespace="namespace"
             )
             time.sleep(1)
             
