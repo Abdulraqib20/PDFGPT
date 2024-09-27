@@ -38,7 +38,7 @@ from langchain.memory.buffer import ConversationBufferMemory
 from pinecone import Pinecone
 from langchain_pinecone import PineconeVectorStore
 from pinecone import ServerlessSpec
-from pinecone.grpc import PineconeGRPC as Pinecone
+# from pinecone.grpc import PineconeGRPC as Pinecone
 
 
 
