@@ -383,10 +383,10 @@ def main():
         
         # Process uploaded file
         with st.spinner("Processing the uploaded PDF..."):
-            # docs = rag.document_loader(uploaded_file)
-            # if docs:
-            #     rag.vector_store = rag.create_vector_store(docs)
-            rag.process_uploaded_file(uploaded_file)
+            docs = rag.document_loader(uploaded_file)
+            if docs:
+                rag.vector_store = rag.create_vector_store(docs)
+            # rag.process_uploaded_file(uploaded_file)
             # rag.vector_store = rag.create_vector_store(rag.loaded_doc)    
  
         if rag.vector_store:
