@@ -268,16 +268,16 @@ class RetrievalAugmentGeneration:
             )
             index_name="pdf-gpt"
             
-            if index_name not in pc.list_indexes():
-                pc.create_index(
-                    name=index_name,
-                    dimension=1536, 
-                    metric="cosine", 
-                    spec=ServerlessSpec(
-                        cloud="aws", 
-                        region="us-east-1"
-                    ) 
-                ) 
+            # if index_name not in pc.list_indexes():
+            #     pc.create_index(
+            #         name=index_name,
+            #         dimension=1536, 
+            #         metric="cosine", 
+            #         spec=ServerlessSpec(
+            #             cloud="aws", 
+            #             region="us-east-1"
+            #         ) 
+            #     ) 
             
             index = pc.Index(index_name)
             
