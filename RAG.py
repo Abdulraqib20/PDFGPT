@@ -268,6 +268,21 @@ class RetrievalAugmentGeneration:
             )
             index_name="pdf-gpt"
             
+            # Log the index name being used
+            logger.info(f"Index name being used: {index_name}")
+
+            # Check if the index already exists
+            if index_name not in pc.list_indexes():
+                # If it doesn't exist, create a new index
+                logger.info(f"Creating new index: {index_name}")
+                pc.create_index(
+                    name=index_name,
+                    dimension=1536,  # Adjust this to match your embedding dimension
+                    metric="cosine"
+                )
+            else:
+                logger.info(f"Index {index_name} already exists. Using the existing index.")
+            
             # if index_name not in pc.list_indexes():
             #     pc.create_index(
             #         name=index_name,
@@ -296,7 +311,10 @@ class RetrievalAugmentGeneration:
         
         except Exception as e:
             logger.error(f"Error creating vector store: {str(e)}")
+            logger.error(f"Index name: {index_name}")
+            logger.error(f"List of indexes: {pc.list_indexes()}")
             st.error(f"Error creating vector store: {str(e)}")
+
             return None
     
      
