@@ -7,7 +7,8 @@ import logging
 from dotenv import load_dotenv;load_dotenv()
 import warnings;warnings.filterwarnings("ignore")
 
-from langchain.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
+# from langchain.pydantic_v1 import BaseModel, Field
 from langchain_core.utils.function_calling import convert_to_openai_function
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder, HumanMessagePromptTemplate
 from langchain_core.messages import HumanMessage, ToolMessage
