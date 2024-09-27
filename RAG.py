@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+import time
 import streamlit as st
 import logging
 import gc
@@ -34,7 +35,9 @@ from langchain.memory.buffer import ConversationBufferMemory
 
 # using PineCone Vector store
 from pinecone import Pinecone
-from langchain_pinecone.vectorstores import PineconeVectorStore
+from langchain_pinecone import PineconeVectorStore
+from pinecone import ServerlessSpec
+# from pinecone.grpc import PineconeGRPC as Pinecone
 
 
 
@@ -91,7 +94,7 @@ class RetrievalAugmentGeneration:
 
             pdf_display = f"""
                 <iframe src="data:application/pdf;base64,{base64_pdf}" 
-                width="100%" height="600" type="application/pdf">
+                height="300" type="application/pdf">
                 </iframe>
             """
             st.markdown(pdf_display, unsafe_allow_html=True)
@@ -263,14 +266,34 @@ class RetrievalAugmentGeneration:
                 api_key=PINECONE_API_KEY,
             )
             index_name="pdf-gpt"
+            
+            # if index_name not in pc.list_indexes():
+            #     pc.create_index(
+            #         name=index_name,
+            #         dimension=1536, 
+            #         metric="cosine", 
+            #         spec=ServerlessSpec(
+            #             cloud="aws", 
+            #             region="us-east-1"
+            #         ) 
+            #     ) 
+            
             index = pc.Index(index_name)
             
-            vector_store = PineconeVectorStore(
-                index=index,
-                embedding=_self.embeddings,
-                namespace="my-namespace",
-                text_key=texts
+            # vector_store = PineconeVectorStore.from_documents(
+            #     documents=texts,
+            #     index=index_name,
+            #     embedding=_self.embeddings,
+            #     namespace="wondervector5000"
+            # )
+            
+            vector_store = PineconeVectorStore.from_documents(
+                documents=texts,
+                index=index_name,
+                embedding=_self.load_embeddings(),
+                namespace="wondervector5000"
             )
+            time.sleep(1)
             
             logger.info(f"Vector store created with {len(texts)} chunks.")
             _self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
@@ -446,11 +469,11 @@ class RetrievalAugmentGeneration:
         return st.session_state.chat_history
     
     @staticmethod
-    def clear_chat_history(self):
+    def clear_chat_history():
         st.session_state.chat_history = []
         st.session_state.messages = []
         st.session_state.context = None
-        self.memory.clear()
+        # self.memory.clear()
         gc.collect()
         logger.info("Chat history cleared and memory reset.")
         st.success("Conversation history cleared successfully!")

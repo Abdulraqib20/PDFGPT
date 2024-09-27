@@ -390,7 +390,7 @@ def main():
             # rag.vector_store = rag.create_vector_store(rag.loaded_doc)    
  
         if rag.vector_store:
-            st.success("PDF processed and vector store created successfully!")
+            st.sidebar.success("PDF processed and vector store created successfully!")
         else:
             st.error("Failed to process PDF or create vector store. Please try again.")
             return
