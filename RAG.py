@@ -22,7 +22,8 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from dotenv import load_dotenv;load_dotenv()
 from langchain_groq import ChatGroq
-from langchain.schema import StrOutputParser, Document
+from langchain.schema import StrOutputParser
+from langchain.schema import Document
 from langchain.memory.buffer import ConversationBufferMemory
 
 # using Qdrant Vector store
@@ -31,7 +32,7 @@ from langchain.memory.buffer import ConversationBufferMemory
 
 # using Chroma Vector Store
 # import chromadb
-# from langchain_community.vectorstores import 
+# from langchain_community.vectorstores import Chroma
 
 # using PineCone Vector store
 from pinecone import Pinecone
@@ -69,7 +70,7 @@ class RetrievalAugmentGeneration:
 
     @st.cache_resource
     def load_llm(_self):
-        llm = ChatGroq(model=MODEL_NAME, api_key=GROQ_API_KEY, temperature=TEMPERATURE, max_retries=5)
+        llm = ChatGroq(model=MODEL_NAME, api_key=GROQ_API_KEY, temperature=TEMPERATURE)
         return llm
 
 #-----------------------------------------------Initialize Session State---------------------------------#
@@ -231,7 +232,7 @@ class RetrievalAugmentGeneration:
             
     #         vector_store = Chroma.from_documents(
     #             documents=texts,
-    #             embedding=_self.embeddings,
+    #             embedding=_self.load_embeddings(),
     #             persist_directory=_self.persist_directory
     #         )
     #         vector_store.persist()
@@ -267,25 +268,18 @@ class RetrievalAugmentGeneration:
             )
             index_name="pdf-gpt"
             
-            # if index_name not in pc.list_indexes():
-            #     pc.create_index(
-            #         name=index_name,
-            #         dimension=1536, 
-            #         metric="cosine", 
-            #         spec=ServerlessSpec(
-            #             cloud="aws", 
-            #             region="us-east-1"
-            #         ) 
-            #     ) 
+            if index_name not in pc.list_indexes():
+                pc.create_index(
+                    name=index_name,
+                    dimension=1536, 
+                    metric="cosine", 
+                    spec=ServerlessSpec(
+                        cloud="aws", 
+                        region="us-east-1"
+                    ) 
+                ) 
             
             index = pc.Index(index_name)
-            
-            # vector_store = PineconeVectorStore.from_documents(
-            #     documents=texts,
-            #     index=index_name,
-            #     embedding=_self.embeddings,
-            #     namespace="wondervector5000"
-            # )
             
             vector_store = PineconeVectorStore.from_documents(
                 documents=texts,
@@ -297,6 +291,7 @@ class RetrievalAugmentGeneration:
             
             logger.info(f"Vector store created with {len(texts)} chunks.")
             _self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
+            
             return vector_store
         
         except Exception as e:
@@ -362,7 +357,7 @@ class RetrievalAugmentGeneration:
             
             # relevant_docs = self.retriever.get_relevant_documents(user_query)
             # relevant_docs = self.vector_store.similarity_search(user_query, k=4)
-            # relevant_docs = retriever.get_relevant_documents(user_query)
+            relevant_docs = self.retriever.get_relevant_documents(user_query)
             
             relevant_docs = self.vector_store.similarity_search(user_query, k=4)
             logger.info(f"Retrieved {len(relevant_docs)} relevant documents.")
