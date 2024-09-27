@@ -302,16 +302,15 @@ class RetrievalAugmentGeneration:
      
     
     #-----------------------------------------------Creating Vector Store with Qdrant---------------------------------#       
-    @st.cache_resource
-    def create_vector_store(_self, _documents: List[Document]) -> Optional[Qdrant]:
+    def create_vector_store(self, _documents: List[Document]) -> Optional[Qdrant]:
         if not _documents:
             logger.warning("No documents provided to the vector store.")
             return None
 
         try:
             text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=_self.chunk_size,
-                chunk_overlap=_self.chunk_overlap,
+                chunk_size=self.chunk_size,
+                chunk_overlap=self.chunk_overlap,
                 separators=["\n\n", "\n", " ", ""]
             )
             texts = text_splitter.split_documents(_documents)
@@ -326,13 +325,13 @@ class RetrievalAugmentGeneration:
             # Create vector store using Qdrant
             vector_store = Qdrant.from_documents(
                 documents=texts,
-                embedding=_self.embeddings,
+                embedding=self.load_embeddings(),
                 client=qdrant_client,
                 collection_name="pdf-gpt"
             )
             
             logger.info(f"Vector store created with {len(texts)} chunks.")
-            _self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
+            self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
             return vector_store
 
         except Exception as e:
