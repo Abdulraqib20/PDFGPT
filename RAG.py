@@ -27,18 +27,18 @@ from langchain.schema import Document
 from langchain.memory.buffer import ConversationBufferMemory
 
 # using Qdrant Vector store
-from qdrant_client import QdrantClient
-from langchain_community.vectorstores import Qdrant
+# from qdrant_client import QdrantClient
+# from langchain_community.vectorstores import Qdrant
 
 # using Chroma Vector Store
 # import chromadb
 # from langchain_community.vectorstores import Chroma
 
 # using PineCone Vector store
-# from pinecone import Pinecone
-# from langchain_pinecone import PineconeVectorStore
-# from pinecone import ServerlessSpec
-# from pinecone.grpc import PineconeGRPC as Pinecone
+from pinecone import Pinecone
+from langchain_pinecone import PineconeVectorStore
+from pinecone import ServerlessSpec
+from pinecone.grpc import PineconeGRPC as Pinecone
 
 
 
@@ -249,95 +249,95 @@ class RetrievalAugmentGeneration:
     
     
     #-----------------------------------------------Creating Vector Store with PineCone---------------------------------#       
-    # @st.cache_resource
-    # def create_vector_store(_self, _documents: List[Document]) -> Optional[PineconeVectorStore]:
-    #     if not _documents:
-    #         logger.warning("No documents provided to the vector store.")
-    #         return None
-
-    #     try:
-    #         text_splitter = RecursiveCharacterTextSplitter(
-    #         chunk_size=_self.chunk_size,
-    #         chunk_overlap=_self.chunk_overlap,
-    #         separators=["\n\n", "\n", " ", ""]
-    #         )
-    #         texts = text_splitter.split_documents(_documents)
-            
-    #         pc = Pinecone(
-    #             api_key=PINECONE_API_KEY,
-    #         )
-    #         index_name="pdf-gpt"
-            
-    #         if index_name not in pc.list_indexes():
-    #             pc.create_index(
-    #                 name=index_name,
-    #                 dimension=1536, 
-    #                 metric="cosine", 
-    #                 spec=ServerlessSpec(
-    #                     cloud="aws", 
-    #                     region="us-east-1"
-    #                 ) 
-    #             ) 
-            
-    #         index = pc.Index(index_name)
-            
-    #         vector_store = PineconeVectorStore.from_documents(
-    #             documents=texts,
-    #             index=index_name,
-    #             embedding=_self.load_embeddings(),
-    #             namespace="wondervector5000"
-    #         )
-    #         time.sleep(1)
-            
-    #         logger.info(f"Vector store created with {len(texts)} chunks.")
-    #         _self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
-            
-    #         return vector_store
-        
-    #     except Exception as e:
-    #         logger.error(f"Error creating vector store: {str(e)}")
-    #         st.error(f"Error creating vector store: {str(e)}")
-    #         return None
-    
-     
-    
-    #-----------------------------------------------Creating Vector Store with Qdrant---------------------------------#       
-    def create_vector_store(self, _documents: List[Document]) -> Optional[Qdrant]:
+    @st.cache_resource
+    def create_vector_store(_self, _documents: List[Document]) -> Optional[PineconeVectorStore]:
         if not _documents:
             logger.warning("No documents provided to the vector store.")
             return None
 
         try:
             text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=self.chunk_size,
-                chunk_overlap=self.chunk_overlap,
-                separators=["\n\n", "\n", " ", ""]
+            chunk_size=_self.chunk_size,
+            chunk_overlap=_self.chunk_overlap,
+            separators=["\n\n", "\n", " ", ""]
             )
             texts = text_splitter.split_documents(_documents)
             
-            from src.config.appconfig import QDRANT_API_KEY
-            # Connect to Qdrant Cloud using API key and cloud URL
-            qdrant_client = QdrantClient(
-                url="https://c5ebb319-693e-4833-9fee-0dd76cd68e67.europe-west3-0.gcp.cloud.qdrant.io:6333",
-                api_key=QDRANT_API_KEY
+            pc = Pinecone(
+                api_key=PINECONE_API_KEY,
             )
+            index_name="pdf-gpt"
             
-            # Create vector store using Qdrant
-            vector_store = Qdrant.from_documents(
+            if index_name not in pc.list_indexes():
+                pc.create_index(
+                    name=index_name,
+                    dimension=1536, 
+                    metric="cosine", 
+                    spec=ServerlessSpec(
+                        cloud="aws", 
+                        region="us-east-1"
+                    ) 
+                ) 
+            
+            index = pc.Index(index_name)
+            
+            vector_store = PineconeVectorStore.from_documents(
                 documents=texts,
-                embedding=self.load_embeddings(),
-                client=qdrant_client,
-                collection_name="pdf-gpt"
+                index=index_name,
+                embedding=_self.load_embeddings(),
+                namespace="wondervector5000"
             )
+            time.sleep(1)
             
             logger.info(f"Vector store created with {len(texts)} chunks.")
-            self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
+            _self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
+            
             return vector_store
-
+        
         except Exception as e:
             logger.error(f"Error creating vector store: {str(e)}")
             st.error(f"Error creating vector store: {str(e)}")
             return None
+    
+     
+    
+    #-----------------------------------------------Creating Vector Store with Qdrant---------------------------------#       
+    # def create_vector_store(self, _documents: List[Document]) -> Optional[Qdrant]:
+    #     if not _documents:
+    #         logger.warning("No documents provided to the vector store.")
+    #         return None
+
+    #     try:
+    #         text_splitter = RecursiveCharacterTextSplitter(
+    #             chunk_size=self.chunk_size,
+    #             chunk_overlap=self.chunk_overlap,
+    #             separators=["\n\n", "\n", " ", ""]
+    #         )
+    #         texts = text_splitter.split_documents(_documents)
+            
+    #         from src.config.appconfig import QDRANT_API_KEY
+    #         # Connect to Qdrant Cloud using API key and cloud URL
+    #         qdrant_client = QdrantClient(
+    #             url="https://c5ebb319-693e-4833-9fee-0dd76cd68e67.europe-west3-0.gcp.cloud.qdrant.io:6333",
+    #             api_key=QDRANT_API_KEY
+    #         )
+            
+    #         # Create vector store using Qdrant
+    #         vector_store = Qdrant.from_documents(
+    #             documents=texts,
+    #             embedding=self.load_embeddings(),
+    #             client=qdrant_client,
+    #             collection_name="pdf-gpt"
+    #         )
+            
+    #         logger.info(f"Vector store created with {len(texts)} chunks.")
+    #         self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
+    #         return vector_store
+
+    #     except Exception as e:
+    #         logger.error(f"Error creating vector store: {str(e)}")
+    #         st.error(f"Error creating vector store: {str(e)}")
+    #         return None
 
        
     
