@@ -249,31 +249,30 @@ class RetrievalAugmentGeneration:
     
     
     #-----------------------------------------------Creating Vector Store with PineCone---------------------------------#       
-    @st.cache_resource
-    def create_vector_store(_self, _documents: List[Document]) -> Optional[PineconeVectorStore]:
-        if not _documents:
+    # @st.cache_resource
+    def create_vector_store(self, documents: List[Document]) -> Optional[PineconeVectorStore]:
+        if not documents:
             logger.warning("No documents provided to the vector store.")
             return None
 
         try:
             text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=_self.chunk_size,
-            chunk_overlap=_self.chunk_overlap,
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap,
             separators=["\n\n", "\n", " ", ""]
             )
-            texts = text_splitter.split_documents(_documents)
+            texts = text_splitter.split_documents(documents)
             
             pc = Pinecone(
                 api_key=PINECONE_API_KEY,
             )
             index_name="pdf-gpt"
             
-            # Log the index name being used
-            logger.info(f"Index name being used: {index_name}")
-
+            # List all existing indexes
+            existing_indexes = pc.list_indexes()
+            
             # Check if the index already exists
-            if index_name not in pc.list_indexes():
-                # If it doesn't exist, create a new index
+            if index_name not in existing_indexes:
                 logger.info(f"Creating new index: {index_name}")
                 pc.create_index(
                     name=index_name,
@@ -287,29 +286,18 @@ class RetrievalAugmentGeneration:
             else:
                 logger.info(f"Index {index_name} already exists. Using the existing index.")
             
-            # if index_name not in pc.list_indexes():
-            #     pc.create_index(
-            #         name=index_name,
-            #         dimension=1536, 
-            #         metric="cosine", 
-            #         spec=ServerlessSpec(
-            #             cloud="aws", 
-            #             region="us-east-1"
-            #         ) 
-            #     ) 
-            
             index = pc.Index(index_name)
             
             vector_store = PineconeVectorStore.from_documents(
                 documents=texts,
                 index=index_name,
-                embedding=_self.load_embeddings(),
+                embedding=self.load_embeddings(),
                 namespace="wondervector5000"
             )
             time.sleep(1)
             
             logger.info(f"Vector store created with {len(texts)} chunks.")
-            _self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
+            self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
             
             return vector_store
         
