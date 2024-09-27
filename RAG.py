@@ -216,7 +216,7 @@ class RetrievalAugmentGeneration:
     
 
 #-----------------------------------------------Creating Vector Store with Chroma---------------------------------#       
-    @st.cache_resource
+    # @st.cache_resource
     def create_vector_store(_self, _documents: List[Document]) -> Optional[Chroma]:
         if not _documents:
             logger.warning("No documents provided to the vector store.")
