@@ -334,16 +334,18 @@ st.markdown("Unlock insights from your PDF documents with AI-powered chat.")
 
 # upload a PDF file
 with st.sidebar:
-    st.header("📁 Document Upload")
+    # How to Use
+    st.sidebar.header("🚀 How to Use")
+    st.sidebar.markdown("""
+    1. **Upload your PDF**: Use the sidebar to upload your PDF document.
+    2. **Start chatting**: Once your document is uploaded, use the chat interface to ask questions.
+    3. **Explore insights**: The AI will analyze your document and provide relevant answers.
+    """)
+    
+    st.header("📁 PDF Document Upload")
     uploaded_file = st.sidebar.file_uploader("Upload a PDF file", type=["pdf"])
 
-# How to Use
-st.sidebar.header("🚀 How to Use")
-st.sidebar.markdown("""
-1. **Upload your PDF**: Use the sidebar to upload your PDF document.
-2. **Start chatting**: Once your document is uploaded, use the chat interface to ask questions.
-3. **Explore insights**: The AI will analyze your document and provide relevant answers.
-""")
+
 
 
 #-------------------------------------Pydantic model for PDF Chat--------------------------------
@@ -354,11 +356,11 @@ class PdfChat(BaseModel):
     query: str = Field(..., description='Query about the PDF Document')
 
 #-----------------------------------------------Input validation---------------------------------
-def validate_user_input(user_input: str) -> bool:
-    if not user_input or not re.match(r'^[a-zA-Z0-9\s\.\,\?\!]+$', user_input):
-        st.warning("Please enter a valid query using alphanumeric characters and basic punctuation.")
-        return False
-    return True
+# def validate_user_input(user_input: str) -> bool:
+#     if not user_input or not re.match(r'^[a-zA-Z0-9\s\.\,\?\!]+$', user_input):
+#         st.warning("Please enter a valid query using alphanumeric characters and basic punctuation.")
+#         return False
+#     return True
    
 #----------------------------------------------------Function to process chat
 def process_chat(model, user_input: str, chat_history: List[Any]) -> Any:
@@ -369,18 +371,23 @@ def process_chat(model, user_input: str, chat_history: List[Any]) -> Any:
 
 
 #------------------------------------------------MAIN APPLICATION-----------------------------------------------------
-def main():    
-    
+def main():
+    #------------------------------------------------------Initialize RAG-----------------------------------------
+    rag = RetrievalAugmentGeneration()  
+    rag.initialize_session_state()
 
     if uploaded_file is not None:
         
-        #------------------------------------------------------Initialize RAG-----------------------------------------
-        rag = RetrievalAugmentGeneration()
+        # display pdf overview
+        rag.display_pdf(uploaded_file)
         
         # Process uploaded file
         with st.spinner("Processing the uploaded PDF..."):
+            # docs = rag.document_loader(uploaded_file)
+            # if docs:
+            #     rag.vector_store = rag.create_vector_store(docs)
             rag.process_uploaded_file(uploaded_file)
-            rag.vector_store = rag.create_vector_store(rag.loaded_doc)       
+            # rag.vector_store = rag.create_vector_store(rag.loaded_doc)    
  
         if rag.vector_store:
             st.success("PDF processed and vector store created successfully!")
@@ -403,17 +410,9 @@ def main():
 
         
         #---------------------------------------------Initialize Chat Models--------------------------------------
-        chat_model = rag.llm
+        chat_model = rag.load_llm()
         chat_with_tools = chat_model.bind_tools(tools=[pdf_chats_func]) 
         chain =  prompt | chat_with_tools
-
-        #---------------------------------------------Initialize Session State--------------------------------
-        rag.initialize_session_state()
-        # if 'chat_history' not in st.session_state:
-        #     st.session_state.chat_history = [] 
-
-        # if "messages" not in st.session_state:
-        #     st.session_state.messages = []
 
         #-----------------------------------------Display Chat History--------------------------------
         for message in st.session_state.messages:
@@ -422,7 +421,7 @@ def main():
 
         #------------------------------------------User input
         if user_input := st.chat_input('Message PDF-GPT 💬', key='user_input'):
-            if user_input and validate_user_input(user_input):
+            if user_input:
                 st.session_state.messages.append({"role": "user", "content": user_input})
             
             with st.chat_message("user", avatar="🧑‍💻"):

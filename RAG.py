@@ -4,34 +4,47 @@ import os
 import tempfile
 import streamlit as st
 import logging
+import gc
+import base64
+import gc
+import tempfile
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 from typing import Optional, List, Dict, Any
+import uuid
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
-# from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from dotenv import load_dotenv;load_dotenv()
 from langchain_groq import ChatGroq
-from langchain_community.vectorstores import Chroma
-# from langchain_community.vectorstores import Pinecone as PineConeVector
-# from pinecone import Pinecone
-# from langchain_pinecone import PineconeVectorStore
-# from langchain_community.vectorstores import Pinecone as langchain_pinecone
 from langchain.schema import StrOutputParser, Document
 from langchain.memory.buffer import ConversationBufferMemory
-import warnings;warnings.filterwarnings("ignore")
 
-from src.config.appconfig import GROQ_API_KEY, MODEL_NAME, TEMPERATURE
+# using Qdrant Vector store
+# from qdrant_client import QdrantClient
+# from langchain_community.vectorstores import Qdrant
+
+# using Chroma Vector Store
+# import chromadb
+# from langchain_community.vectorstores import 
+
+# using PineCone Vector store
+from pinecone import Pinecone
+from langchain_pinecone.vectorstores import PineconeVectorStore
+
+
+
+from src.config.appconfig import GROQ_API_KEY, MODEL_NAME, TEMPERATURE, QDRANT_API_KEY, PINECONE_API_KEY
 from src.tools.prompt_neck import PDF_SYS_PROMPT_NECK
 
 # PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
 # GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 
+import warnings;warnings.filterwarnings("ignore")
 
 ####---------------------------------------------RAG---------------------------------------------------------------####
 
@@ -51,14 +64,45 @@ class RetrievalAugmentGeneration:
         self.loaded_doc = None
 
 
+    @st.cache_resource
+    def load_llm(_self):
+        llm = ChatGroq(model=MODEL_NAME, api_key=GROQ_API_KEY, temperature=TEMPERATURE, max_retries=5)
+        return llm
+
 #-----------------------------------------------Initialize Session State---------------------------------#
-    @staticmethod
-    def initialize_session_state():
+    def initialize_session_state(self):
+        if "id" not in st.session_state:
+            st.session_state.id = uuid.uuid4()
+            st.session_state.file_cache = {}
+
         if 'chat_history' not in st.session_state:
-            st.session_state.chat_history = [] 
+            st.session_state.chat_history = []
 
         if "messages" not in st.session_state:
             st.session_state.messages = []
+    
+    @staticmethod
+    def display_pdf(file):
+        with st.sidebar:
+            st.markdown("### PDF Preview")
+            file_content = file.read()
+            base64_pdf = base64.b64encode(file_content).decode("utf-8")
+            file.seek(0)  # Reset file pointer to the beginning
+
+            pdf_display = f"""
+                <iframe src="data:application/pdf;base64,{base64_pdf}" 
+                width="100%" height="600" type="application/pdf">
+                </iframe>
+            """
+            st.markdown(pdf_display, unsafe_allow_html=True)
+            
+            # Add download button
+            st.download_button(
+                label="Download PDF",
+                data=file_content,
+                file_name=file.name,
+                mime="application/pdf"
+            )
             
     
 #-----------------------------------------------Load PDF Document---------------------------------#    
@@ -96,12 +140,54 @@ class RetrievalAugmentGeneration:
             logger.error(f"Error loading PDF: {str(e)}")
             st.error(f"Error loading PDF: {str(e)}")
             return None
-            
+     
+    # def document_loader(self, uploaded_file):
+    #     if uploaded_file is None:
+    #         st.warning("Please upload a PDF file.")
+    #         return None
+        
+    #     try:
+    #         session_id = st.session_state.id
+    #         with tempfile.TemporaryDirectory() as temp_dir:
+    #             file_path = os.path.join(temp_dir, uploaded_file.name)
+                
+    #             with open(file_path, "wb") as f:
+    #                 f.write(uploaded_file.getvalue())
+                
+    #             file_key = f"{session_id}-{uploaded_file.name}"
+    #             st.write("Indexing your document...")
+
+    #             if file_key not in st.session_state.get('file_cache', {}):
+    #                 if os.path.exists(temp_dir):
+    #                     loader = SimpleDirectoryReader(
+    #                         input_dir=temp_dir,
+    #                         required_exts=[".pdf"],
+    #                         recursive=True
+    #                     )
+    #                 else:    
+    #                     st.error('Could not find the file you uploaded, please check again...')
+    #                     st.stop()
+
+    #                 docs = loader.load_data()
+    #                 # Convert llama_index documents to langchain documents
+    #                 langchain_docs = [Document(page_content=doc.text, metadata=doc.metadata) for doc in docs]
+    #                 self.loaded_doc = langchain_docs
+    #                 return langchain_docs
+        
+    #     except Exception as e:
+    #         st.error(f"An error occurred: {e}")
+    #         st.stop()
         
 #-----------------------------------------------Load Embeddings---------------------------------#    
     @st.cache_resource
     def load_embeddings(_self):
         try:
+            # embed_model = HuggingFaceEmbedding(
+            #     model_name="BAAI/bge-large-en-v1.5", 
+            #     trust_remote_code=True
+            # )
+            # Settings.embed_model = embed_model
+            
             embeddings =  HuggingFaceEmbeddings(
                 model_name="sentence-transformers/all-MiniLM-L6-v2",
                 model_kwargs={'device': 'cpu'},
@@ -125,9 +211,42 @@ class RetrievalAugmentGeneration:
             return None
     
 
-#-----------------------------------------------Creating Vector Store---------------------------------#       
+#-----------------------------------------------Creating Vector Store with Chroma---------------------------------#       
+    # @st.cache_resource
+    # def create_vector_store(_self, _documents: List[Document]) -> Optional[Chroma]:
+    #     if not _documents:
+    #         logger.warning("No documents provided to the vector store.")
+    #         return None
+
+    #     try:
+    #         text_splitter = RecursiveCharacterTextSplitter(
+    #         chunk_size=_self.chunk_size,
+    #         chunk_overlap=_self.chunk_overlap,
+    #         separators=["\n\n", "\n", " ", ""]
+    #         )
+    #         texts = text_splitter.split_documents(_documents)
+            
+    #         vector_store = Chroma.from_documents(
+    #             documents=texts,
+    #             embedding=_self.embeddings,
+    #             persist_directory=_self.persist_directory
+    #         )
+    #         vector_store.persist()
+            
+    #         logger.info(f"Vector store created with {len(texts)} chunks.")
+    #         _self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
+    #         return vector_store
+        
+    #     except Exception as e:
+    #         logger.error(f"Error creating vector store: {str(e)}")
+    #         st.error(f"Error creating vector store: {str(e)}")
+    #         return None
+        
+    
+    
+    #-----------------------------------------------Creating Vector Store with PineCone---------------------------------#       
     @st.cache_resource
-    def create_vector_store(_self, _documents: List[Document]) -> Optional[Chroma]:
+    def create_vector_store(_self, _documents: List[Document]) -> Optional[PineconeVectorStore]:
         if not _documents:
             logger.warning("No documents provided to the vector store.")
             return None
@@ -140,23 +259,70 @@ class RetrievalAugmentGeneration:
             )
             texts = text_splitter.split_documents(_documents)
             
-            embeddings = _self.load_embeddings()
-            
-            vector_store = Chroma.from_documents(
-                documents=texts,
-                embedding=embeddings,
-                persist_directory=_self.persist_directory
+            pc = Pinecone(
+                api_key=PINECONE_API_KEY,
             )
-            vector_store.persist()
+            index_name="pdf-gpt"
+            index = pc.Index(index_name)
+            
+            vector_store = PineconeVectorStore(
+                index=index,
+                embedding=_self.embeddings,
+                namespace="my-namespace",
+                text_key=texts
+            )
             
             logger.info(f"Vector store created with {len(texts)} chunks.")
+            _self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
             return vector_store
         
         except Exception as e:
             logger.error(f"Error creating vector store: {str(e)}")
             st.error(f"Error creating vector store: {str(e)}")
             return None
-        
+    
+     
+    
+    #-----------------------------------------------Creating Vector Store with Qdrant---------------------------------#       
+    # @st.cache_resource
+    # def create_vector_store(_self, _documents: List[Document]) -> Optional[Qdrant]:
+    #     if not _documents:
+    #         logger.warning("No documents provided to the vector store.")
+    #         return None
+
+    #     try:
+    #         text_splitter = RecursiveCharacterTextSplitter(
+    #             chunk_size=_self.chunk_size,
+    #             chunk_overlap=_self.chunk_overlap,
+    #             separators=["\n\n", "\n", " ", ""]
+    #         )
+    #         texts = text_splitter.split_documents(_documents)
+            
+    #         from src.config.appconfig import QDRANT_API_KEY
+    #         # Connect to Qdrant Cloud using API key and cloud URL
+    #         qdrant_client = QdrantClient(
+    #             url="https://c5ebb319-693e-4833-9fee-0dd76cd68e67.europe-west3-0.gcp.cloud.qdrant.io:6333",
+    #             api_key=QDRANT_API_KEY
+    #         )
+            
+    #         # Create vector store using Qdrant
+    #         vector_store = Qdrant.from_documents(
+    #             documents=texts,
+    #             embedding=_self.embeddings,
+    #             client=qdrant_client,
+    #             collection_name="pdf-gpt"
+    #         )
+            
+    #         logger.info(f"Vector store created with {len(texts)} chunks.")
+    #         _self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
+    #         return vector_store
+
+    #     except Exception as e:
+    #         logger.error(f"Error creating vector store: {str(e)}")
+    #         st.error(f"Error creating vector store: {str(e)}")
+    #         return None
+
+       
     
 #-----------------------------------------------Creating Retriever---------------------------------# 
     def retriever(self, user_query: str) -> Dict[str, Any]:
@@ -171,14 +337,11 @@ class RetrievalAugmentGeneration:
         
         try:
             
-            k = 4
-            retriever = self.vector_store.as_retriever(
-                search_type="similarity",
-                search_kwargs={"k": k}  
-            )
+            # relevant_docs = self.retriever.get_relevant_documents(user_query)
+            # relevant_docs = self.vector_store.similarity_search(user_query, k=4)
+            # relevant_docs = retriever.get_relevant_documents(user_query)
             
             relevant_docs = self.vector_store.similarity_search(user_query, k=4)
-            # relevant_docs = retriever.get_relevant_documents(user_query)
             logger.info(f"Retrieved {len(relevant_docs)} relevant documents.")
             
             # return {"documents": relevant_docs}
@@ -192,32 +355,30 @@ class RetrievalAugmentGeneration:
             logger.error(f"Error in retriever: {str(e)}")
             return {"error": str(e)}
     
+#-----------------------------------------------Format Docs---------------------------------#  
+    @staticmethod
+    def format_docs(docs):
+        return "\n\n".join(doc.page_content for doc in docs)
+    
     
 #-----------------------------------------------Creating RAG Pipeline---------------------------------# 
-    def create_rag_pipeline(_self):
-        if not _self.vector_store:
+    def create_rag_pipeline(self):
+        if not self.vector_store:
             logger.error("Vector store not initialized. Cannot create RAG application.")
             return None
         
-        k = 4
-        retriever = _self.vector_store.as_retriever(search_type="similarity", search_kwargs={"k": k})
+        # retriever = _self.vector_store.as_retriever(search_type="similarity", search_kwargs={"k": k})
         
         prompt = PromptTemplate(input_variables=['context', 'input'], template=PDF_SYS_PROMPT_NECK)
         
         retriever_chain = (
-            {"context": retriever | _self.format_docs, "input": RunnablePassthrough()} 
+            {"context": self.retriever | self.format_docs, "input": RunnablePassthrough()} 
             | prompt 
-            | _self.llm
+            | self.llm
             | StrOutputParser()
         )
         
         return retriever_chain
-
-
-#-----------------------------------------------Load PDF Document---------------------------------#
-    @staticmethod
-    def format_docs(docs):
-        return "\n\n".join(doc.page_content for doc in docs)
         
 
 #-----------------------------------------------Chat with PDF---------------------------------# 
@@ -228,6 +389,8 @@ class RetrievalAugmentGeneration:
                 raise ValueError("RAG pipeline could not be created.")
             
             response = rag_chain.invoke(user_query)
+            self.memory.chat_memory.add_user_message(user_query)
+            self.memory.chat_memory.add_ai_message(response)
             st.session_state.chat_history.append(('Human', user_query))
             st.session_state.chat_history.append(('AI', response))
             logger.info("Successfully generated response.")
@@ -236,6 +399,17 @@ class RetrievalAugmentGeneration:
             error_message = f"Error in chat_with_pdf: {str(e)}"
             logger.error(error_message)
             return {'error': error_message}
+    
+    
+    def clear_session(self):
+        st.session_state.chat_history = []
+        st.session_state.messages = []
+        st.session_state.context = None
+        self.memory.clear()
+        self.vector_store = None
+        self.loaded_doc = None
+        self.current_file_name = None
+        logging.info("Session cleared for new PDF upload.")
     
     
     def process_uploaded_file(self, uploaded_file):
@@ -248,14 +422,35 @@ class RetrievalAugmentGeneration:
                 logger.error("Failed to create vector store.")
         else:
             logger.error("Failed to load the PDF. Please check the file and try again.")
+    
+    
+    # def process_uploaded_file(self, uploaded_file):
+    #     if uploaded_file.name != self.current_file_name:
+    #         self.clear_session()
+    #         self.current_file_name = uploaded_file.name
+
+    #     self.loaded_doc = self.document_loader(uploaded_file)
+    #     if self.loaded_doc:
+    #         self.vector_store = self.create_vector_store(self.loaded_doc)
+    #         if self.vector_store:
+    #             logging.info("Vector store initialized successfully.")
+    #             return True
+    #         else:
+    #             logging.error("Failed to create vector store.")
+    #     else:
+    #         logging.error("Failed to load the PDF.")
+    #     return False
             
 
     def get_chat_history(self) -> List[tuple]:
         return st.session_state.chat_history
     
-
+    @staticmethod
     def clear_chat_history(self):
         st.session_state.chat_history = []
         st.session_state.messages = []
-        logger.info("Chat history cleared.")
+        st.session_state.context = None
+        self.memory.clear()
+        gc.collect()
+        logger.info("Chat history cleared and memory reset.")
         st.success("Conversation history cleared successfully!")
