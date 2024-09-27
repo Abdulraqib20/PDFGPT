@@ -31,7 +31,7 @@ from langchain.memory.buffer import ConversationBufferMemory
 # from langchain_community.vectorstores import Qdrant
 
 # using Chroma Vector Store
-# import chromadb
+import chromadb
 from langchain_community.vectorstores import Chroma
 
 # using PineCone Vector store
