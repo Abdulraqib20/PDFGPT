@@ -266,7 +266,7 @@ class RetrievalAugmentGeneration:
             pc = Pinecone(
                 api_key=PINECONE_API_KEY,
             )
-            index_name="pdf"
+            index_name="pdf-gpt"
             
             # List all existing indexes
             existing_indexes = pc.list_indexes()
