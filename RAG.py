@@ -278,7 +278,11 @@ class RetrievalAugmentGeneration:
                 pc.create_index(
                     name=index_name,
                     dimension=1536,  # Adjust this to match your embedding dimension
-                    metric="cosine"
+                    metric="cosine",
+                    spec=ServerlessSpec(
+                        cloud="aws",
+                        region="us-east-1"
+                    )
                 )
             else:
                 logger.info(f"Index {index_name} already exists. Using the existing index.")
