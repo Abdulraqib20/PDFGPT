@@ -249,7 +249,7 @@ class RetrievalAugmentGeneration:
     
     
     #-----------------------------------------------Creating Vector Store with PineCone---------------------------------#       
-    @st.cache_resource
+    # @st.cache_resource
     def create_vector_store(self, documents: List[Document]) -> Optional[PineconeVectorStore]:
         if not documents:
             logger.warning("No documents provided to the vector store.")
