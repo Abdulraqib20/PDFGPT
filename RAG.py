@@ -23,7 +23,7 @@ from langchain_core.runnables import RunnablePassthrough
 from dotenv import load_dotenv;load_dotenv()
 from langchain_groq import ChatGroq
 from langchain.schema import StrOutputParser
-from langchain.schema import Document
+from langchain_core.documents import Document
 from langchain.memory.buffer import ConversationBufferMemory
 
 # using Qdrant Vector store
@@ -36,9 +36,8 @@ from langchain.memory.buffer import ConversationBufferMemory
 
 # using PineCone Vector store
 # from pinecone.grpc import PineconeGRPC as Pinecone
-from pinecone import Pinecone
+from pinecone import Pinecone, ServerlessSpec
 from langchain_pinecone import PineconeVectorStore
-from pinecone import ServerlessSpec
 
 
 
@@ -198,13 +197,6 @@ class RetrievalAugmentGeneration:
                 encode_kwargs={'normalize_embeddings': False}
             )
             
-            # embeddings =  OpenAIEmbeddings(
-            #     api_key=_self.openai_api_key,
-            #     model="text-embedding-3-small",
-            #     max_retries=3,
-            #     dimensions=1536
-            # )
-            
             logger.info("Embeddings loaded successfully")
             
             return embeddings
@@ -249,47 +241,32 @@ class RetrievalAugmentGeneration:
     
     
     #-----------------------------------------------Creating Vector Store with PineCone---------------------------------#       
-    # @st.cache_resource
+    @st.cache_resource
     def create_vector_store(_self, _documents: List[Document]) -> Optional[PineconeVectorStore]:
         if not _documents:
             logger.warning("No documents provided to the vector store.")
             return None
 
         try:
-            # Define the index name
-            index_name = 'pdf2'
-
             # Initialize Pinecone client
             pc = Pinecone(api_key=PINECONE_API_KEY)
+            index_name = 'pdf'
             
-            # List all existing indexes
-            existing_indexes = pc.list_indexes()
+            existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
+            
+            if index_name not in existing_indexes:
+                pc.create_index(
+                    name=index_name,
+                    dimension=768,
+                    metric="cosine",
+                    spec=ServerlessSpec(cloud="aws", region="us-east-1"),
+                )
+                while not pc.describe_index(index_name).status["ready"]:
+                    time.sleep(1)
+
+            index = pc.Index(index_name)
+            
             logger.info(f"List of indexes: {existing_indexes}")
-
-            # Check if the index already exists
-            # if index_name not in existing_indexes:
-            #     logger.info(f"Creating new index: {index_name}")
-            #     pc.create_index(
-            #         name=index_name,
-            #         dimension=768,
-            #         metric="cosine",
-            #         spec=ServerlessSpec(
-            #             region="us-east-1",
-            #             cloud="aws",
-            #         )
-            #     )
-            #     # Wait until the index is ready
-            #     while True:
-            #         index_info = pc.describe_index(index_name)
-            #         if index_info["status"]["ready"]:
-            #             break
-            #         logger.info("Waiting for index to be ready...")
-            #         time.sleep(1)
-            # else:
-            #     logger.info(f"Index '{index_name}' already exists. Using the existing index.")
-
-            # Connect to the existing index
-            index = pc.Index(name=index_name)
 
             # Split the document into chunks
             text_splitter = RecursiveCharacterTextSplitter(
@@ -299,17 +276,20 @@ class RetrievalAugmentGeneration:
             )
             texts = text_splitter.split_documents(_documents)
             logger.info(f"Successfully split documents into {len(texts)} chunks.")
+            
+            # Generate unique UUIDs for each document chunk
+            from uuid import uuid4
+            uuids = [str(uuid4()) for _ in range(len(texts))]
 
             # Create the Pinecone vector store
-            vector_store = PineconeVectorStore.from_documents(
-                documents=texts,
-                index='pdf2',
+            vector_store = PineconeVectorStore(
+                index=index,
                 embedding=_self.load_embeddings(),
                 namespace="wondervector5000"
             )
-            # Add new documents to the existing vector store
-            vector_store.add_documents(texts)
-            logger.info(f"Vector store created with {len(texts)} chunks.")
+            # Add new documents to the vector store with their unique IDs
+            vector_store.add_documents(documents=texts, ids=uuids)
+            logger.info(f"Vector store created with {len(texts)} chunks and added to index '{index_name}'.")
 
             # Set the retriever
             _self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
@@ -375,10 +355,7 @@ class RetrievalAugmentGeneration:
         try:
             
             # relevant_docs = self.retriever.get_relevant_documents(user_query)
-            # relevant_docs = self.vector_store.similarity_search(user_query, k=4)
-            relevant_docs = self.retriever.get_relevant_documents(user_query)
-            
-            relevant_docs = self.vector_store.similarity_search(user_query, k=4)
+            relevant_docs = self.vector_store.similarity_search(user_query)
             logger.info(f"Retrieved {len(relevant_docs)} relevant documents.")
             
             # return {"documents": relevant_docs}
@@ -459,24 +436,6 @@ class RetrievalAugmentGeneration:
                 logger.error("Failed to create vector store.")
         else:
             logger.error("Failed to load the PDF. Please check the file and try again.")
-    
-    
-    # def process_uploaded_file(self, uploaded_file):
-    #     if uploaded_file.name != self.current_file_name:
-    #         self.clear_session()
-    #         self.current_file_name = uploaded_file.name
-
-    #     self.loaded_doc = self.document_loader(uploaded_file)
-    #     if self.loaded_doc:
-    #         self.vector_store = self.create_vector_store(self.loaded_doc)
-    #         if self.vector_store:
-    #             logging.info("Vector store initialized successfully.")
-    #             return True
-    #         else:
-    #             logging.error("Failed to create vector store.")
-    #     else:
-    #         logging.error("Failed to load the PDF.")
-    #     return False
             
 
     def get_chat_history(self) -> List[tuple]:
