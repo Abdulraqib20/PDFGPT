@@ -303,7 +303,7 @@ class RetrievalAugmentGeneration:
             # Create the Pinecone vector store
             vector_store = PineconeVectorStore.from_documents(
                 documents=texts,
-                index=index,
+                index='pdf2',
                 embedding=_self.load_embeddings(),
                 namespace="wondervector5000"
             )
