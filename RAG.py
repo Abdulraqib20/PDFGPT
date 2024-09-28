@@ -31,14 +31,14 @@ from langchain.memory.buffer import ConversationBufferMemory
 # from langchain_community.vectorstores import Qdrant
 
 # using Chroma Vector Store
-import chromadb
-from langchain_community.vectorstores import Chroma
+# import chromadb
+# from langchain_community.vectorstores import Chroma
 
 # using PineCone Vector store
-# from pinecone import Pinecone
-# from langchain_pinecone import PineconeVectorStore
-# from pinecone import ServerlessSpec
 # from pinecone.grpc import PineconeGRPC as Pinecone
+from pinecone import Pinecone
+from langchain_pinecone import PineconeVectorStore
+from pinecone import ServerlessSpec
 
 
 
@@ -217,97 +217,97 @@ class RetrievalAugmentGeneration:
 
 #-----------------------------------------------Creating Vector Store with Chroma---------------------------------#       
     # @st.cache_resource
-    def create_vector_store(_self, _documents: List[Document]) -> Optional[Chroma]:
-        if not _documents:
-            logger.warning("No documents provided to the vector store.")
-            return None
-
-        try:
-            text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=_self.chunk_size,
-            chunk_overlap=_self.chunk_overlap,
-            separators=["\n\n", "\n", " ", ""]
-            )
-            texts = text_splitter.split_documents(_documents)
-            
-            vector_store = Chroma.from_documents(
-                documents=texts,
-                embedding=_self.load_embeddings(),
-                persist_directory=_self.persist_directory
-            )
-            vector_store.persist()
-            
-            logger.info(f"Vector store created with {len(texts)} chunks.")
-            _self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
-            return vector_store
-        
-        except Exception as e:
-            logger.error(f"Error creating vector store: {str(e)}")
-            st.error(f"Error creating vector store: {str(e)}")
-            return None
-        
-    
-    
-    #-----------------------------------------------Creating Vector Store with PineCone---------------------------------#       
-    # @st.cache_resource
-    # def create_vector_store(self, documents: List[Document]) -> Optional[PineconeVectorStore]:
-    #     if not documents:
+    # def create_vector_store(_self, _documents: List[Document]) -> Optional[Chroma]:
+    #     if not _documents:
     #         logger.warning("No documents provided to the vector store.")
     #         return None
 
     #     try:
     #         text_splitter = RecursiveCharacterTextSplitter(
-    #         chunk_size=self.chunk_size,
-    #         chunk_overlap=self.chunk_overlap,
+    #         chunk_size=_self.chunk_size,
+    #         chunk_overlap=_self.chunk_overlap,
     #         separators=["\n\n", "\n", " ", ""]
     #         )
-    #         texts = text_splitter.split_documents(documents)
+    #         texts = text_splitter.split_documents(_documents)
             
-    #         pc = Pinecone(
-    #             api_key=PINECONE_API_KEY,
-    #         )
-    #         index_name="pdf-gpt"
-            
-    #         # List all existing indexes
-    #         existing_indexes = pc.list_indexes()
-            
-    #         # Check if the index already exists
-    #         if index_name not in existing_indexes:
-    #             logger.info(f"Creating new index: {index_name}")
-    #             pc.create_index(
-    #                 name=index_name,
-    #                 dimension=1536,  # Adjust this to match your embedding dimension
-    #                 metric="cosine",
-    #                 spec=ServerlessSpec(
-    #                     cloud="aws",
-    #                     region="us-east-1"
-    #                 )
-    #             )
-    #         else:
-    #             logger.info(f"Index {index_name} already exists. Using the existing index.")
-            
-    #         index = pc.Index(index_name)
-            
-    #         vector_store = PineconeVectorStore.from_documents(
+    #         vector_store = Chroma.from_documents(
     #             documents=texts,
-    #             index=index_name,
-    #             embedding=self.load_embeddings(),
-    #             namespace="namespace"
+    #             embedding=_self.load_embeddings(),
+    #             persist_directory=_self.persist_directory
     #         )
-    #         time.sleep(1)
+    #         vector_store.persist()
             
     #         logger.info(f"Vector store created with {len(texts)} chunks.")
-    #         self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
-            
+    #         _self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
     #         return vector_store
         
     #     except Exception as e:
     #         logger.error(f"Error creating vector store: {str(e)}")
-    #         logger.error(f"Index name: {index_name}")
-    #         logger.error(f"List of indexes: {pc.list_indexes()}")
     #         st.error(f"Error creating vector store: {str(e)}")
-
     #         return None
+        
+    
+    
+    #-----------------------------------------------Creating Vector Store with PineCone---------------------------------#       
+    @st.cache_resource
+    def create_vector_store(self, documents: List[Document]) -> Optional[PineconeVectorStore]:
+        if not documents:
+            logger.warning("No documents provided to the vector store.")
+            return None
+
+        try:
+            text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap,
+            separators=["\n\n", "\n", " ", ""]
+            )
+            texts = text_splitter.split_documents(documents)
+            
+            pc = Pinecone(
+                api_key=PINECONE_API_KEY,
+            )
+            index_name="pdf-gpt"
+            
+            # List all existing indexes
+            existing_indexes = pc.list_indexes()
+            
+            # Check if the index already exists
+            if index_name not in existing_indexes:
+                logger.info(f"Creating new index: {index_name}")
+                pc.create_index(
+                    name=index_name,
+                    dimension=1536,  # Adjust this to match your embedding dimension
+                    metric="cosine",
+                    spec=ServerlessSpec(
+                        cloud="aws",
+                        region="us-east-1"
+                    )
+                )
+            else:
+                logger.info(f"Index {index_name} already exists. Using the existing index.")
+            
+            index = pc.Index(index_name)
+            
+            vector_store = PineconeVectorStore.from_documents(
+                documents=texts,
+                index=index_name,
+                embedding=self.load_embeddings(),
+                namespace="namespace"
+            )
+            time.sleep(1)
+            
+            logger.info(f"Vector store created with {len(texts)} chunks.")
+            self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
+            
+            return vector_store
+        
+        except Exception as e:
+            logger.error(f"Error creating vector store: {str(e)}")
+            logger.error(f"Index name: {index_name}")
+            logger.error(f"List of indexes: {pc.list_indexes()}")
+            st.error(f"Error creating vector store: {str(e)}")
+
+            return None
     
      
     

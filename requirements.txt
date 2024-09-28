@@ -22,11 +22,12 @@ pinecone-client
 langchain-community
 python-dotenv
 pypdf
-chromadb
-langchain-chroma
+pinecone-client
+# chromadb
+# langchain-chroma
 # pysqlite3-binary
 # pyodbc
-protobuf
-pydantic
-qdrant_client
-langchain-qdrant
+# protobuf
+# pydantic
+# qdrant_client
+# langchain-qdrant
