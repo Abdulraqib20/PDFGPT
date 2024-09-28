@@ -271,8 +271,12 @@ class RetrievalAugmentGeneration:
                 logger.info(f"Creating new index: {index_name}")
                 pc.create_index(
                     name=index_name,
-                    dimension=768,  # Match the dimension of your embeddings
-                    metric="cosine"
+                    dimension=768,
+                    metric="cosine",
+                    spec=ServerlessSpec(
+                        region="us-east-1",
+                        cloud="aws",
+                    )
                 )
                 # Wait until the index is ready
                 while True:
