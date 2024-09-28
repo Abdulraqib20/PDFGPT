@@ -257,7 +257,7 @@ class RetrievalAugmentGeneration:
 
         try:
             # Define the index name
-            index_name = "pdf-gpt"  # Use "pdf" as per your existing index
+            index_name = 'pdf2'
 
             # Initialize Pinecone client
             pc = Pinecone(api_key=PINECONE_API_KEY)
@@ -307,6 +307,8 @@ class RetrievalAugmentGeneration:
                 embedding=_self.load_embeddings(),
                 namespace="wondervector5000"
             )
+            # Add new documents to the existing vector store
+            vector_store.add_documents(texts)
             logger.info(f"Vector store created with {len(texts)} chunks.")
 
             # Set the retriever
