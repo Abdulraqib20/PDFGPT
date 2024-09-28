@@ -267,29 +267,29 @@ class RetrievalAugmentGeneration:
             logger.info(f"List of indexes: {existing_indexes}")
 
             # Check if the index already exists
-            if index_name not in existing_indexes:
-                logger.info(f"Creating new index: {index_name}")
-                pc.create_index(
-                    name=index_name,
-                    dimension=768,
-                    metric="cosine",
-                    spec=ServerlessSpec(
-                        region="us-east-1",
-                        cloud="aws",
-                    )
-                )
-                # Wait until the index is ready
-                while True:
-                    index_info = pc.describe_index(index_name)
-                    if index_info["status"]["ready"]:
-                        break
-                    logger.info("Waiting for index to be ready...")
-                    time.sleep(1)
-            else:
-                logger.info(f"Index '{index_name}' already exists. Using the existing index.")
+            # if index_name not in existing_indexes:
+            #     logger.info(f"Creating new index: {index_name}")
+            #     pc.create_index(
+            #         name=index_name,
+            #         dimension=768,
+            #         metric="cosine",
+            #         spec=ServerlessSpec(
+            #             region="us-east-1",
+            #             cloud="aws",
+            #         )
+            #     )
+            #     # Wait until the index is ready
+            #     while True:
+            #         index_info = pc.describe_index(index_name)
+            #         if index_info["status"]["ready"]:
+            #             break
+            #         logger.info("Waiting for index to be ready...")
+            #         time.sleep(1)
+            # else:
+            #     logger.info(f"Index '{index_name}' already exists. Using the existing index.")
 
             # Connect to the existing index
-            index = pc.Index(index_name)
+            index = pc.Index(name=index_name)
 
             # Split the document into chunks
             text_splitter = RecursiveCharacterTextSplitter(
@@ -303,7 +303,7 @@ class RetrievalAugmentGeneration:
             # Create the Pinecone vector store
             vector_store = PineconeVectorStore.from_documents(
                 documents=texts,
-                index=index_name,  # Use the correct index name
+                index=index,
                 embedding=_self.load_embeddings(),
                 namespace="wondervector5000"
             )
