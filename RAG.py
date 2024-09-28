@@ -266,35 +266,36 @@ class RetrievalAugmentGeneration:
             pc = Pinecone(
                 api_key=PINECONE_API_KEY,
             )
-            index_name="pdf-gpt"
+            index_name="pdf"
             
             # List all existing indexes
             existing_indexes = pc.list_indexes()
             
             # Check if the index already exists
             if index_name not in existing_indexes:
-                logger.info(f"Creating new index: {index_name}")
-                pc.create_index(
-                    name=index_name,
-                    dimension=1536,  # Adjust this to match your embedding dimension
-                    metric="cosine",
-                    spec=ServerlessSpec(
-                        cloud="aws",
-                        region="us-east-1"
-                    )
-                )
-            else:
-                logger.info(f"Index {index_name} already exists. Using the existing index.")
+                logger.error(f"Index {index_name} does not exist. Available indexes: {existing_indexes}")
+                return None
             
+            logger.info(f"Using existing index: {index_name}")
             index = pc.Index(index_name)
+        
+            # pc.create_index(
+            #     name=index_name,
+            #     dimension=1536,  # Adjust this to match your embedding dimension
+            #     metric="cosine",
+            #     spec=ServerlessSpec(
+            #         cloud="aws",
+            #         region="us-east-1"
+            #     )
+            # )
             
             vector_store = PineconeVectorStore.from_documents(
                 documents=texts,
-                index=index_name,
+                index=index,
                 embedding=self.load_embeddings(),
                 namespace="namespace"
             )
-            time.sleep(1)
+            # time.sleep(1)
             
             logger.info(f"Vector store created with {len(texts)} chunks.")
             self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
