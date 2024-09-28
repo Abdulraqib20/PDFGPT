@@ -250,58 +250,69 @@ class RetrievalAugmentGeneration:
     
     #-----------------------------------------------Creating Vector Store with PineCone---------------------------------#       
     # @st.cache_resource
-    def create_vector_store(self, documents: List[Document]) -> Optional[PineconeVectorStore]:
-        if not documents:
+    def create_vector_store(_self, _documents: List[Document]) -> Optional[PineconeVectorStore]:
+        if not _documents:
             logger.warning("No documents provided to the vector store.")
             return None
 
         try:
-            text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=self.chunk_size,
-            chunk_overlap=self.chunk_overlap,
-            separators=["\n\n", "\n", " ", ""]
-            )
-            texts = text_splitter.split_documents(documents)
-            
-            pc = Pinecone(
-                api_key=PINECONE_API_KEY,
-            )
-            index_name="pdf"
+            # Define the index name
+            index_name = "pdf"  # Use "pdf" as per your existing index
+
+            # Initialize Pinecone client
+            pc = Pinecone(api_key=PINECONE_API_KEY)
             
             # List all existing indexes
             existing_indexes = pc.list_indexes()
-            
-            if index_name not in existing_indexes:
-                logger.error(f"Index {index_name} does not exist. Available indexes: {existing_indexes}")
-                return None
+            logger.info(f"List of indexes: {existing_indexes}")
 
-            logger.info(f"Using existing index: {index_name}")
+            # Check if the index already exists
+            if index_name not in existing_indexes:
+                logger.info(f"Creating new index: {index_name}")
+                pc.create_index(
+                    name=index_name,
+                    dimension=768,  # Match the dimension of your embeddings
+                    metric="cosine"
+                )
+                # Wait until the index is ready
+                while True:
+                    index_info = pc.describe_index(index_name)
+                    if index_info["status"]["ready"]:
+                        break
+                    logger.info("Waiting for index to be ready...")
+                    time.sleep(1)
+            else:
+                logger.info(f"Index '{index_name}' already exists. Using the existing index.")
+
+            # Connect to the existing index
             index = pc.Index(index_name)
-            
+
+            # Split the document into chunks
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=_self.chunk_size,
+                chunk_overlap=_self.chunk_overlap,
+                separators=["\n\n", "\n", " ", ""]
+            )
+            texts = text_splitter.split_documents(_documents)
+            logger.info(f"Successfully split documents into {len(texts)} chunks.")
+
+            # Create the Pinecone vector store
             vector_store = PineconeVectorStore.from_documents(
                 documents=texts,
-                index=index,
-                embedding=self.load_embeddings(),
-                namespace="namespace"
+                index=index_name,  # Use the correct index name
+                embedding=_self.load_embeddings(),
+                namespace="wondervector5000"
             )
-            # time.sleep(1)
-            
-            # Add new documents to the existing vector store
-            vector_store.add_documents(texts)
-            
             logger.info(f"Vector store created with {len(texts)} chunks.")
-            self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
-            
+
+            # Set the retriever
+            _self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
             return vector_store
-        
+
         except Exception as e:
             logger.error(f"Error creating vector store: {str(e)}")
-            logger.error(f"Index name: {index_name}")
-            logger.error(f"List of indexes: {pc.list_indexes()}")
             st.error(f"Error creating vector store: {str(e)}")
-
             return None
-    
      
     
     #-----------------------------------------------Creating Vector Store with Qdrant---------------------------------#       
