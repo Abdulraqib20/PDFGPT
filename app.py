@@ -393,7 +393,7 @@ def main():
         if rag.vector_store:
             st.sidebar.success("PDF processed and vector store created successfully!")
         else:
-            st.error("Failed to process PDF or create vector store. Please try again.")
+            st.sidebar.error("Failed to process PDF or create vector store. Please try again.")
             return
 
         #---------------------------------------CONVERTING TO FUNCTION DECLARATION OBJECT---------------------------------

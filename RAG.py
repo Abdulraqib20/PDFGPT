@@ -9,6 +9,7 @@ import gc
 import base64
 import gc
 import tempfile
+from uuid import uuid4
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ from langchain_groq import ChatGroq
 from langchain.schema import StrOutputParser
 from langchain_core.documents import Document
 from langchain.memory.buffer import ConversationBufferMemory
+from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
 
 # using Qdrant Vector store
 # from qdrant_client import QdrantClient
@@ -65,6 +67,10 @@ class RetrievalAugmentGeneration:
         self.embeddings = self.load_embeddings()
         self.vector_store = None
         self.loaded_doc = None
+        
+        self.pinecone_client = Pinecone(api_key=PINECONE_API_KEY)
+        self.index_name = 'pdf'
+        self.current_namespace = None
 
 
     @st.cache_resource
@@ -248,25 +254,30 @@ class RetrievalAugmentGeneration:
             return None
 
         try:
-            # Initialize Pinecone client
-            pc = Pinecone(api_key=PINECONE_API_KEY)
-            index_name = 'pdf'
             
-            existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
+            # Generate a new namespace for each upload
+            _self.current_namespace = f"pdf-{uuid.uuid4()}"
+            index = _self.pinecone_client.Index(_self.index_name)
             
-            if index_name not in existing_indexes:
-                pc.create_index(
-                    name=index_name,
-                    dimension=768,
-                    metric="cosine",
-                    spec=ServerlessSpec(cloud="aws", region="us-east-1"),
-                )
-                while not pc.describe_index(index_name).status["ready"]:
-                    time.sleep(1)
+            # # Initialize Pinecone client
+            # pc = Pinecone(api_key=PINECONE_API_KEY)
+            # index_name = 'pdf'
+            
+            # existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
+            
+            # if index_name not in existing_indexes:
+            #     pc.create_index(
+            #         name=index_name,
+            #         dimension=768,
+            #         metric="cosine",
+            #         spec=ServerlessSpec(cloud="aws", region="us-east-1"),
+            #     )
+            #     while not pc.describe_index(index_name).status["ready"]:
+            #         time.sleep(1)
 
-            index = pc.Index(index_name)
+            # index = pc.Index(index_name)
             
-            logger.info(f"List of indexes: {existing_indexes}")
+            # logger.info(f"List of indexes: {existing_indexes}")
 
             # Split the document into chunks
             text_splitter = RecursiveCharacterTextSplitter(
@@ -278,22 +289,21 @@ class RetrievalAugmentGeneration:
             logger.info(f"Successfully split documents into {len(texts)} chunks.")
             
             # Generate unique UUIDs for each document chunk
-            from uuid import uuid4
             uuids = [str(uuid4()) for _ in range(len(texts))]
 
             # Create the Pinecone vector store
-            vector_store = PineconeVectorStore(
+            _self.vector_store = PineconeVectorStore(
                 index=index,
                 embedding=_self.load_embeddings(),
-                namespace="wondervector5000"
+                namespace=_self.current_namespace
             )
             # Add new documents to the vector store with their unique IDs
-            vector_store.add_documents(documents=texts, ids=uuids)
-            logger.info(f"Vector store created with {len(texts)} chunks and added to index '{index_name}'.")
+            _self.vector_store.add_documents(documents=texts, ids=uuids)
+            logger.info(f"Vector store created with {len(texts)} chunks in namespace '{_self.current_namespace}'.")
 
             # Set the retriever
-            _self.retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
-            return vector_store
+            _self.retriever = _self.vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
+            return _self.vector_store
 
         except Exception as e:
             logger.error(f"Error creating vector store: {str(e)}")
@@ -344,9 +354,9 @@ class RetrievalAugmentGeneration:
 #-----------------------------------------------Creating Retriever---------------------------------# 
     def retriever(self, user_query: str) -> Dict[str, Any]:
         logger.info('Retrieving Relevant Documents')
-        if os.path.exists(self.persist_directory) == False:
-                self.document_loader()
-                self.create_vector_store()
+        # if os.path.exists(self.persist_directory) == False:
+        #         self.document_loader()
+        #         self.create_vector_store()
         
         if not self.vector_store:
             logger.error("Vector store not initialized.")
@@ -416,6 +426,14 @@ class RetrievalAugmentGeneration:
     
     
     def clear_session(self):
+        if self.current_namespace:
+            try:
+                index = self.pinecone_client.Index(self.index_name)
+                index.delete(namespace=self.current_namespace)
+                logger.info(f"Deleted namespace {self.current_namespace} from Pinecone index.")
+            except Exception as e:
+                logger.error(f"Error deleting Pinecone namespace: {str(e)}")
+        self.current_namespace = None
         st.session_state.chat_history = []
         st.session_state.messages = []
         st.session_state.context = None
