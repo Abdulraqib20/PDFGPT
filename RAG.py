@@ -257,7 +257,7 @@ class RetrievalAugmentGeneration:
 
         try:
             # Define the index name
-            index_name = "pdf"  # Use "pdf" as per your existing index
+            index_name = "pdf-gpt"  # Use "pdf" as per your existing index
 
             # Initialize Pinecone client
             pc = Pinecone(api_key=PINECONE_API_KEY)
